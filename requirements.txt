@@ -1,3 +1,4 @@
+av>=14.0.0
 faster-whisper
 requests
 yt-dlp[default]
