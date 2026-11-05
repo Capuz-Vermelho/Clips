@@ -1,0 +1,86 @@
+name: Gerar clips
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Link do vídeo (YouTube etc.)"
+        required: true
+        type: string
+      n:
+        description: "Quantidade de clips"
+        default: "5"
+        type: string
+      min:
+        description: "Duração mínima (s)"
+        default: "20"
+        type: string
+      max:
+        description: "Duração máxima (s)"
+        default: "60"
+        type: string
+      vertical:
+        description: "Formato vertical 9:16"
+        type: boolean
+        default: true
+      subs:
+        description: "Queimar legendas"
+        type: boolean
+        default: true
+      whisper:
+        description: "Modelo de transcrição"
+        type: choice
+        default: small
+        options: [tiny, base, small, medium]
+
+jobs:
+  clips:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Instalar dependências
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg
+          pip install -U -r requirements.txt
+
+      - name: Gerar clips
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          URL: ${{ inputs.url }}
+          N: ${{ inputs.n }}
+          MIN: ${{ inputs.min }}
+          MAX: ${{ inputs.max }}
+          WHISPER: ${{ inputs.whisper }}
+          VERTICAL: ${{ inputs.vertical }}
+          SUBS: ${{ inputs.subs }}
+        run: |
+          ARGS=(-n "$N" --min "$MIN" --max "$MAX" --llm gemini --whisper "$WHISPER")
+          [ "$VERTICAL" = "true" ] && ARGS+=(--vertical)
+          [ "$SUBS" = "true" ] && ARGS+=(--subs)
+          if [ -n "$YT_COOKIES" ]; then
+            printf '%s' "$YT_COOKIES" > cookies.txt
+            ARGS+=(--cookies cookies.txt)
+          fi
+          python gerar_clips.py "$URL" "${ARGS[@]}"
+
+      - name: Enviar clips
+        uses: actions/upload-artifact@v4
+        with:
+          name: clips
+          path: |
+            clips_saida/clip*
+            clips_saida/transcricao.json
+          retention-days: 7
